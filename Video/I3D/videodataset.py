@@ -1,5 +1,6 @@
 import torch
 import torch.utils.data as data
+import torch.nn.functional as F
 from torchvision.datasets import DatasetFolder
 from torchvision.datasets.folder import *
 
