@@ -1,55 +1,39 @@
+import torch
 import torch.utils.data as data
-from torchvision.datasets import ImageFolder
-from PIL import Image
+import torch.nn.functional as F
+from torchvision.datasets import DatasetFolder
+from torchvision.datasets.folder import *
 
 import os
-import os.path
-import json
 import numpy as np
-import pandas as pd
+from PIL import Image
 
-IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', 'webp']
+from tqdm import tqdm
+from glob import glob
 
-
-def has_file_allowed_extension(filename, extensions):
-    filename_lower = filename.lower()
-    return any(filename_lower.endswith(ext) for ext in extensions)
 
 def is_image_file(filename):
     return has_file_allowed_extension(filename, IMG_EXTENSIONS)
 
-
 def make_dataset(dir, class_to_idx):
     fnames, labels = [], []
-    lists = sorted(os.listdir(dir))
-  
+    
     for label in sorted(os.listdir(dir)):
-        for fname in os.listdir(os.path.join(dir, label)):
-            if is_image_file(fname):
-                continue
-            fnames.append(os.path.join(dir, label, fname))
-            labels.append(label)
+        for fname in sorted(os.listdir(os.path.join(dir, label))):
+            for frame in sorted(os.listdir(os.path.join(dir, label, fname))):
+                if not is_image_file(frame):
+                    continue
+                fnames.append(os.path.join(dir, label, fname, frame))
+                labels.append(label)
             
     assert len(labels) == len(fnames)
-    print('Number of {} videos: {:d}'.format(dir, len(fnames)))
+    print('Number of {} images: {:d}'.format(dir, len(fnames)))
     targets = labels_to_idx(labels)
-    
     return [fnames, targets]
 
 def labels_to_idx(labels):
-    
     labels_dict = {label: i for i, label in enumerate(sorted(set(labels)))}
     return np.array([labels_dict[label] for label in labels], dtype=int)
-
-
-def find_classes(dir):
-    """
-       returns classes, class_to_idx
-    """
-    classes = [d for d in os.listdir(dir) if os.path.isdir(os.path.join(dir, d))]
-    classes.sort()
-    class_to_idx = {classes[i]: i for i in range(len(classes))}
-    return classes, class_to_idx
 
 
 def pil_loader(path):
@@ -59,23 +43,6 @@ def pil_loader(path):
         return img.convert('RGB')
 
 
-def accimage_loader(path):
-    import accimage
-    try:
-        return accimage.Image(path)
-    except IOError:
-        # Potentially a decoding problem, fall back to PIL.Image
-        return pil_loader(path)
-
-
-def default_loader(path):
-    from torchvision import get_image_backend
-    if get_image_backend() == 'accimage':
-        return accimage_loader(path)
-    else:
-        return pil_loader(path)
-    
-    
 class ImageDataset(ImageFolder):
     
     def __init__(self, root, transform=None, target_transform=None,
@@ -84,10 +51,11 @@ class ImageDataset(ImageFolder):
                                           transform=transform,
                                           target_transform=target_transform)
         classes, class_to_idx = find_classes(root)
+        samples = make_dataset(root, class_to_idx)
         self.root = root
         self.classes = classes
         self.class_to_idx = class_to_idx
-        self.samples = make_dataset(root, class_to_idx)
+        self.samples = samples
         
         self.loader = loader
         self.transform = transform
@@ -102,7 +70,8 @@ class ImageDataset(ImageFolder):
         Returns:
             tuple: (sample, target) where target is class_index of the target class.
         """
-        path, target = self.samples[index]
+        path = self.samples[0][index]
+        target = self.samples[1][index]
         sample = self.loader(path)
         
         if self.transform is not None:
@@ -113,7 +82,7 @@ class ImageDataset(ImageFolder):
         return sample, target
     
     def __getpath__(self, index):
-        return self.samples[index]
+        return self.samples[0][index]
     
     def __len__(self):
         return len(self.samples[0]) # fnames
